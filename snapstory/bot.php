@@ -26,6 +26,7 @@ if (!is_null($snaps))
         $snapchat->setStory($tmpFilePath, $snap->time);
         $snapchat->markSnapViewed($snap->id);
         unlink($tmpFilePath);
+        $snapchat->sendMessage($snap->sender, "Your snap has been processed, and it should appear on this account's story. Thank you for submitting!");
         echo "Processed!<br /><br />";
     }
 }
