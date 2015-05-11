@@ -15,14 +15,15 @@ $tmpPath = '/tmp/';
 $snapchat = new Snapchat($username, $gEmail, $gPasswd, $debug);
 $snapchat->login($password);
 
-if($addback == true) {
-$unconfirmed = $snapchat->getUnconfirmedFriends();
-if (!is_null($unconfirmed))
+if($addback == true) 
 {
-  print_r($unconfirmed);
-  foreach($unconfirmed as $friend)
-      $snapchat->addFriendBack($friend);
-}
+    $unconfirmed = $snapchat->getUnconfirmedFriends();
+    if (!is_null($unconfirmed))
+  {
+    print_r($unconfirmed);
+    foreach($unconfirmed as $friend)
+    $snapchat->addFriendBack($friend);
+  }
 }
 
 $snaps = $snapchat->getSnaps();
