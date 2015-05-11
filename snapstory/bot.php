@@ -13,6 +13,15 @@ $debug = false; // Set this to true if you want to see all outgoing requests and
 $tmpPath = '/tmp/';
 $snapchat = new Snapchat($username, $gEmail, $gPasswd, $debug);
 $snapchat->login($password);
+$unconfirmed = $snapchat->getUnconfirmedFriends();
+
+// Add friends
+if (!is_null($unconfirmed))
+{
+  print_r($unconfirmed);
+  foreach($unconfirmed as $friend)
+      $snapchat->addFriendBack($friend);
+}
 
 $snaps = $snapchat->getSnaps();
 
