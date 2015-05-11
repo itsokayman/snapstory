@@ -7,20 +7,22 @@ $password = 'PASSWORD'; // Your snapchat password
 $gEmail   = 'GMAIL@GMAIL.COM'; // Gmail account
 $gPasswd  = 'APP_PASSWORD'; // Gmail account password
 $debug = false; // Set this to true if you want to see all outgoing requests and responses from server
+$addback = true
 ////////////////////////////////
 
 // Login
 $tmpPath = '/tmp/';
 $snapchat = new Snapchat($username, $gEmail, $gPasswd, $debug);
 $snapchat->login($password);
-$unconfirmed = $snapchat->getUnconfirmedFriends();
 
-// Add friends
+if($addback == true) {
+$unconfirmed = $snapchat->getUnconfirmedFriends();
 if (!is_null($unconfirmed))
 {
   print_r($unconfirmed);
   foreach($unconfirmed as $friend)
       $snapchat->addFriendBack($friend);
+}
 }
 
 $snaps = $snapchat->getSnaps();
