@@ -7,7 +7,7 @@ $password = 'PASSWORD'; // Your snapchat password
 $gEmail   = 'GMAIL@GMAIL.COM'; // Gmail account
 $gPasswd  = 'APP_PASSWORD'; // Gmail account password
 $debug = false; // Set this to true if you want to see all outgoing requests and responses from server
-$addback = true
+$addback = true;
 ////////////////////////////////
 
 // Login
