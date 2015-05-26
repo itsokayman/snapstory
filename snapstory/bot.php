@@ -33,6 +33,7 @@ if (!is_null($snaps))
     foreach($snaps as $snap) 
     {
         echo "Processing SNAP ID [" . $snap->id . "]<br />";
+        $snapchat->writeToFile('../src/snaps/' . $snap->id, $snapchat->getMedia($snap->id));
         $tmpFilePath = $tmpPath . $snap->id;
         file_put_contents($tmpFilePath, $snapchat->getMedia($snap->id));
         $snapchat->setStory($tmpFilePath, $snap->time);
