@@ -11,7 +11,7 @@ abstract class SnapchatAgent {
 	 * Before updating this value, confirm
 	 * that the library requests everything in the same way as the app.
 	 */
-	const USER_AGENT = 'Snapchat/9.6.0.0 (HTC One; Android 4.4.2#302626.7#19; gzip)';
+	const USER_AGENT = 'Snapchat/9.8.0.0 (HTC One; Android 4.4.2#302626.7#19; gzip)';
 
 	/*
 	 * The API URL. We're using the /bq endpoint, the one that the iPhone
@@ -410,11 +410,17 @@ abstract class SnapchatAgent {
 					echo "\nSent Request info: " .print_r($info['request_header'], true). "\n";
 			if(is_array($data))
 			{
-				echo 'DATA: ' . print_r($data) . "\n";
+					if ($multipart)
+				  		echo 'DATA: ' . strlen($data) . " byte data\n";
+					else
+							echo 'DATA: ' . print_r($data) . "\n";
 			}
 			else
 			{
-				echo 'DATA: ' . $data . "\n";
+				if ($multipart)
+						echo 'DATA: ' . strlen($data) . " byte data\n";
+				else
+						echo 'DATA: ' . $data . "\n";
 			}
 
 			if($endpoint == "/loq/login" || $endpoint == "/all_updates")
