@@ -11,7 +11,7 @@ abstract class SnapchatAgent {
 	 * Before updating this value, confirm
 	 * that the library requests everything in the same way as the app.
 	 */
-	const USER_AGENT = 'Snapchat/9.8.0.0 (HTC One; Android 4.4.2#302626.7#19; gzip)';
+	const USER_AGENT = 'Snapchat/9.9.0.0 (HTC One; Android 4.4.2#302626.7#19; gzip)';
 
 	/*
 	 * The API URL. We're using the /bq endpoint, the one that the iPhone
@@ -358,7 +358,7 @@ abstract class SnapchatAgent {
 			curl_setopt($ch, CURLINFO_HEADER_OUT, true);
 		}
 
-		if($endpoint == "/loq/login")
+		if($endpoint == "/loq/login" || $endpoint == "/loq/register_username")
 		{
 			$headers = array_merge(self::$CURL_HEADERS, array(
 				"X-Snapchat-Client-Auth-Token: Bearer {$params[2]}",
