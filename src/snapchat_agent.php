@@ -11,7 +11,7 @@ abstract class SnapchatAgent {
 	 * Before updating this value, confirm
 	 * that the library requests everything in the same way as the app.
 	 */
-	const USER_AGENT = 'Snapchat/9.9.0.0 (HTC One; Android 4.4.2#302626.7#19; gzip)';
+	const USER_AGENT = 'Snapchat/9.10.0.0 (HTC One; Android 4.4.2#302626.7#19; gzip)';
 
 	/*
 	 * The API URL. We're using the /bq endpoint, the one that the iPhone
@@ -395,8 +395,6 @@ abstract class SnapchatAgent {
 		curl_setopt($ch, CURLOPT_WRITEHEADER, $headerBuff);
 		curl_setopt($ch, CURLOPT_PROXY, $this->proxyServer);
 		$result = curl_exec($ch);
-
-
 		if(strlen($result) > 0) //make sure curl worked. if not, keep going
 		{
 			if($endpoint == "/loq/login") $result = gzdecode($result);
@@ -427,6 +425,8 @@ abstract class SnapchatAgent {
 			{
 				$jsonResult = json_decode($result);
 				echo 'RESULT: ' . print_r($jsonResult) . "\n";
+				if (property_exists($jsonResult, "status") && $jsonResult->status == '-103')
+						exit();
 			}
 			else
 			{
