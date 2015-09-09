@@ -73,8 +73,10 @@ class Snapchat extends SnapchatAgent {
 	 *
 	 * @param string $username
 	 *   The username for the Snapchat account.
-	 * @param string $password
-	 *   The password associated with the username, if logging in.
+	 * @param string $gEmail
+	 *   The Google e-mail used for this device.
+	 * @param string $gPasswd
+	 *   The Google password used for this gEmail.
 	 */
 	public function __construct($username, $gEmail, $gPasswd, $debug = FALSE)
 	{
@@ -135,33 +137,96 @@ class Snapchat extends SnapchatAgent {
 		return $result;
 	}
 
-	private function getAttestation($password, $timestamp)
+	public function getAttestation($password, $timestamp)
 	{
-		$hashString     = $this->username."|{$password}|{$timestamp}|/loq/login";
-		$nonce          = base64_encode(hash('sha256', $hashString, true));
-		$authentication = 'cp4craTcEr82Pdf5j8mwFKyb8FNZbcel';
-		$apkDigest      = 'JJShKOLH4YYjWZlJQ71A2dPTcmxbaMboyfo0nsKYayE';
+		$binary = file_get_contents("https://api.casper.io/droidguard/create/binary");
+		$binaryJSON = json_decode($binary);
 
-		$url = 'http://attest.casper.io/attestation';
-		$data = array(
-			'nonce'           => $nonce,
-			'authentication'  => $authentication,
-			'apk_digest'      => $apkDigest,
-			'timestamp'       => $timestamp
-		);
 
-		$options = array(
-			'http' => array(
-				'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
-				'method'  => 'POST',
-				'content' => http_build_query($data),
-			),
-		);
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_URL, "https://www.googleapis.com/androidantiabuse/v1/x/create?alt=PROTO&key=AIzaSyBofcZsgLSS7BOnBjZPEkk4rYwzOIz-lTI");
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+		curl_setopt($ch, CURLOPT_ENCODING, "gzip");
+		curl_setopt($ch, CURLOPT_USERAGENT, "DroidGuard/7329000 (A116 _Quad KOT49H); gzip");
+		curl_setopt($ch, CURLOPT_POST, TRUE);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, base64_decode($binaryJSON->binary));
+		curl_setopt($ch, CURLOPT_HTTPHEADER, array("Accept:", "Expect:", "content-type: application/x-protobuf"));
 
-		$context  = stream_context_create($options);
-		$result = json_decode(file_get_contents($url, false, $context));
+		$return = curl_exec($ch);
 
-		return $result->signedAttestation;
+		if(curl_getinfo($ch, CURLINFO_HTTP_CODE) != 200)
+		{
+			throw new Exception("attestationCreate Exception: HTTP Status Code != 200");
+		}
+
+		curl_close($ch);
+
+		$ch = curl_init();
+
+		curl_setopt($ch, CURLOPT_URL, "https://api.casper.io/droidguard/attest/binary");
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+		curl_setopt($ch, CURLOPT_POST, TRUE);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, array(
+			"bytecode_proto" => base64_encode($return),
+			"nonce" => base64_encode(hash("sha256", $this->username."|{$password}|{$timestamp}|/loq/login", true)),
+			"apk_digest" => "5O40Rllov9V8PpwD5zPmmp+GQi7UMIWz2A0LWZA7UX0="
+		));
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+
+		$return = curl_exec($ch);
+
+		if(curl_getinfo($ch, CURLINFO_HTTP_CODE) != 200)
+		{
+			throw new Exception("getAttestation Exception: HTTP Status Code != 200");
+		}
+
+		curl_close($ch);
+
+		$return = json_decode($return);
+
+		if(!$return || !isset($return->binary))
+		{
+			throw new Exception("getAttestation Exception: Invalid JSON / No signedAttestation returned");
+		}
+
+		$postData = base64_decode($return->binary);
+
+		$ch = curl_init();
+
+		curl_setopt($ch, CURLOPT_URL, "https://www.googleapis.com/androidcheck/v1/attestations/attest?alt=JSON&key=AIzaSyDqVnJBjE5ymo--oBJt3On7HQx9xNm1RHA");
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+		curl_setopt($ch, CURLOPT_HEADER, FALSE);
+		curl_setopt($ch, CURLOPT_POST, TRUE);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+		curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+			'Accept:',
+			'Expect:',
+			'User-Agent: SafetyNet/7899000 (WIKO JZO54K); gzip',
+			'Content-Type: application/x-protobuf',
+			'Content-Length: ' . strlen($postData),
+			'Connection: Keep-Alive'
+		));
+		curl_setopt($ch, CURLOPT_ENCODING, "gzip");
+
+		$return = curl_exec($ch);
+
+		if(curl_getinfo($ch, CURLINFO_HTTP_CODE) != 200)
+		{
+			throw new Exception("getAttestation Exception: HTTP Status Code != 200");
+		}
+
+		curl_close($ch);
+
+		$return = json_decode($return);
+
+		if(!$return || !isset($return->signedAttestation))
+		{
+			throw new Exception("getAttestation Exception: Invalid JSON / No signedAttestation returned");
+		}
+
+		return $return->signedAttestation;
 	}
 
 	public function encryptPassword($email, $password)
@@ -274,6 +339,43 @@ class Snapchat extends SnapchatAgent {
 		return $return;
 	}
 
+	public function getClientAuthToken($username, $password, $timestamp)
+	{
+		$data = array(
+			"username" => $username,
+			"password" => $password,
+			"timestamp" => $timestamp
+		);
+
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_URL, "https://api.casper.io/security/login/signrequest/");
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+		curl_setopt($ch, CURLINFO_HEADER_OUT, TRUE);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+		curl_setopt($ch, CURLOPT_HEADER, FALSE);
+		curl_setopt($ch, CURLOPT_ENCODING, "gzip");
+		curl_setopt($ch, CURLOPT_POST, TRUE);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+		$return = curl_exec($ch);
+
+		if(curl_getinfo($ch, CURLINFO_HTTP_CODE) != 200)
+		{
+			$return["error"] = 1;
+			$return["data"] = "HTTP Status Code != 200";
+
+			return $return;
+		}
+		curl_close($ch);
+		$return = json_decode($return, true);
+		if(!$return || $return["code"] != 200 || !isset($return["signature"]))
+		{
+			$return["error"] = 1;
+			$return["data"] = "Invalid JSON / Incorrect status / No signature returned.";
+		}
+
+		return $return;
+	}
+
 	private function getGCMToken()
 	{
 		$ch = curl_init();
@@ -345,73 +447,106 @@ class Snapchat extends SnapchatAgent {
 
 		if(($do == 1) || (!(array_key_exists($this->username,$this->totArray[0]))) || (!(array_key_exists($this->username,$this->totArray[1]))))
 		{
-				$dtoken = $this->getDeviceToken();
+			$dtoken = $this->getDeviceToken();
 
-				if($dtoken['error'] == 1)
-				{
-						$return['message'] = "Failed to get new Device token set.";
-						return $return;
-				}
+			if($dtoken['error'] == 1)
+			{
+					$return['message'] = "Failed to get new Device token set.";
+					return $return;
+			}
 
-				$timestamp = parent::timestamp();
-				$req_token = parent::hash(parent::STATIC_TOKEN, $timestamp);
-				$string = $this->username . "|" . $password . "|" . $timestamp . "|" . $req_token;
+			$timestamp = parent::timestamp();
+			$req_token = parent::hash(parent::STATIC_TOKEN, $timestamp);
+			$string = $this->username . "|" . $password . "|" . $timestamp . "|" . $req_token;
 
-				$auth = $this->getAuthToken();
-				$this->totArray[1][$this->username] = array($auth, time()+(55*60));
-				file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . self::DATA_FOLDER . DIRECTORY_SEPARATOR . "auth-$this->username.dat", serialize($this->totArray));
-				if($auth['error'] == 1)
-				{
-						return $auth;
-				}
-				parent::setGAuth($auth);
-                $attestation = $this->getAttestation($password, $timestamp);
+			$auth = $this->getAuthToken();
+			$this->totArray[1][$this->username] = array($auth, time()+(55*60));
+			file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . self::DATA_FOLDER . DIRECTORY_SEPARATOR . "auth-$this->username.dat", serialize($this->totArray));
+			if($auth['error'] == 1)
+			{
+					return $auth;
+			}
+			parent::setGAuth($auth);
+            $attestation = $this->getAttestation($password, $timestamp);
+			$clientAuthToken = $this->getClientAuthToken($this->username, $password, $timestamp);
 
-				$result = parent::post(
-					'/loq/login',
-					array(
-						'username' => $this->username,
-						'password' => $password,
-						'height' => 1280,
-						'width' => 720,
-						'max_video_height' => 640,
-						'max_video_width' => 480,
-						'dsig' => substr(hash_hmac('sha256', $string, $dtoken['data']->dtoken1v), 0, 20),
-						'dtoken1i' => $dtoken['data']->dtoken1i,
-						'ptoken' => "ie",
-						'timestamp' => $timestamp,
-						'attestation' => $attestation,
-						'sflag' => 1,
-						'application_id' => 'com.snapchat.android',
-						'req_token' => $req_token,
-					),
-					array(
-						parent::STATIC_TOKEN,
-						$timestamp,
-						$auth['auth']
-					),
-					$multipart = false,
-					$debug = $this->debug
-				);
+			$result = parent::post(
+				'/loq/login',
+				array(
+					'username' => $this->username,
+					'password' => $password,
+					'height' => 1280,
+					'width' => 720,
+					'max_video_height' => 640,
+					'max_video_width' => 480,
+					'dsig' => substr(hash_hmac('sha256', $string, $dtoken['data']->dtoken1v), 0, 20),
+					'dtoken1i' => $dtoken['data']->dtoken1i,
+					'ptoken' => "ie",
+					'timestamp' => $timestamp,
+					'attestation' => $attestation,
+					'sflag' => 1,
+					'application_id' => 'com.snapchat.android',
+					'req_token' => $req_token,
+				),
+				array(
+					parent::STATIC_TOKEN,
+					$timestamp,
+					$auth['auth'],
+					$clientAuthToken["signature"]
+				),
+				$multipart = false,
+				$debug = $this->debug
+			);
 
 
-				if($result['error'] == 1)
-				{
-					return $result;
-				}
-
-				if(isset($result['data']->updates_response->logged) && $result['data']->updates_response->logged)
-				{
-					$this->auth_token = $result['data']->updates_response->auth_token;
-					$this->device();
-					$this->totArray[0][$this->username] = $this->auth_token;
-					file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . self::DATA_FOLDER . DIRECTORY_SEPARATOR . "auth-$this->username.dat", serialize($this->totArray));
-				}
-
+			if($result['error'] == 1)
+			{
 				return $result;
-		} else {
-				$this->openAppEvent();
+			}
+
+			if(isset($result['data']->updates_response->logged) && $result['data']->updates_response->logged)
+			{
+				$this->auth_token = $result['data']->updates_response->auth_token;
+				$this->device();
+				$this->totArray[0][$this->username] = $this->auth_token;
+				file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . self::DATA_FOLDER . DIRECTORY_SEPARATOR . "auth-$this->username.dat", serialize($this->totArray));
+			}
+
+			return $result;
 		}
+		else
+		{
+			$this->openAppEvent();
+			return $this->device();
+		}
+	}
+
+	/**
+	 * IP Routing
+	 */
+	public function ipRouting()
+	{
+		// Make sure we're logged in and have a valid access token.
+		if(!$this->auth_token || !$this->username)
+		{
+			return FALSE;
+		}
+
+		$timestamp = parent::timestamp();
+		$result = parent::post(
+			'/bq/ip_routing',
+			array(
+				'ip_routing_key' => '{"https:\/\/feelinsonice-hrd.appspot.com":"https:\/\/feelinsonice-hrd.appspot.com"}',
+				'timestamp' => $timestamp,
+				'username' => $this->username
+			),
+			array(
+				$this->auth_token,
+				$timestamp,
+			),
+			$multipart = false,
+			$debug = $this->debug
+		);
 	}
 
 	/**
@@ -477,13 +612,32 @@ class Snapchat extends SnapchatAgent {
 	public function register($username, $password, $email, $birthday, $phone_verification = FALSE, $phone_number = NULL)
 	{
 		$timestamp = parent::timestamp();
+		$req_token = parent::hash(parent::STATIC_TOKEN, $timestamp);
+		$string = $this->username . "|" . $password . "|" . $timestamp . "|" . $req_token;
+
+		$dtoken = $this->getDeviceToken();
+
+		if($dtoken['error'] == 1)
+		{
+				$return['message'] = "Failed to get new Device token set.";
+				return $return;
+		}
+
+		$attestation = $this->getAttestation($password, $timestamp);
+
+		$birthDate = explode("-", $birthday);
+		$age = (date("md", date("U", mktime(0, 0, 0, $birthDate[0], $birthDate[1], $birthDate[2]))) > date("md") ? ((date("Y") - $birthDate[2]) - 1) : (date("Y") - $birthDate[2]));
 		$result = parent::post(
 			'/loq/register',
 			array(
+				'age'	=>	$age,
+				'dsig' => substr(hash_hmac('sha256', $string, $dtoken['data']->dtoken1v), 0, 20),
+				'dtoken1i' => $dtoken['data']->dtoken1i,
 				'birthday' => $birthday,
 				'password' => $password,
 				'email' => $email,
 				'timestamp' => $timestamp,
+				'attestation'	=> $attestation
 			),
 			array(
 				parent::STATIC_TOKEN,
@@ -852,8 +1006,11 @@ class Snapchat extends SnapchatAgent {
 
 	public function getConversations()
 	{
+		$offset = null;
 		$updates = $this->getUpdates();
-		$offset = end($updates['data']->conversations_response)->iter_token;
+		$last = end($updates['data']->conversations_response);
+		if (isset($last->iter_token))
+			$offset = $last->iter_token;
 		$convos = $updates['data']->conversations_response;
 		while(strlen($offset) > 0){
 			$timestamp = parent::timestamp();
@@ -940,6 +1097,36 @@ class Snapchat extends SnapchatAgent {
 		return $result;
 	}
 
+	/**
+	 * Download profile data
+	 *
+	 */
+	 public function downloadProfileData()
+	 {
+	 	// Make sure we're logged in and have a valid access token.
+	 	if(!$this->auth_token || !$this->username)
+	 	{
+			return FALSE;
+	 	}
+
+		$timestamp = parent::timestamp();
+		$result = parent::post(
+			'/bq/download_profile_data',
+			array(
+				'size' => 'MEDIUM',
+				'username' => $this->username,
+				'username_image' => $this->username
+			),
+			array(
+				$this->auth_token,
+				$timestamp,
+			),
+			$multipart = false,
+			$debug = $this->debug
+		);
+
+		return $result;
+	}
 	/**
 	 * Gets the user's snaps.
 	 *
@@ -1085,7 +1272,7 @@ class Snapchat extends SnapchatAgent {
 			{
 				$timestamp = parent::timestamp();
 				$result = parent::post(
-					'/ph/find_friends',
+					'/bq/find_friends',
 					array(
 						'countryCode' => $country,
 						'numbers' => json_encode($batch, JSON_FORCE_OBJECT),
@@ -1235,9 +1422,9 @@ class Snapchat extends SnapchatAgent {
 		$friends = $updates['data']->friends_response->added_friends;
 		foreach($friends as $friend)
 		{
-				if ($friend->type == 1)
+				if ($friend->type == 0)
 				{
-					if (($friend->name != 'array') && ($friend->is_shared_story != 1))
+					if ((!is_array($friend->name)) && (isset($friend->is_shared_story) && ($friend->is_shared_story != 0)))
 							$unconfirmedList[] = $friend->name;
 				}
 		}
@@ -1726,8 +1913,13 @@ class Snapchat extends SnapchatAgent {
 
 		if($ext != null)
 		{
-			rename($path, $path . $ext);
+			$newFile = $path . $ext;
+			rename($path, $newFile);
+
+			return $newFile;
 		}
+		else
+			return false;
 	}
 
 	/**
@@ -1993,7 +2185,7 @@ class Snapchat extends SnapchatAgent {
 	 * @return mixed
 	 *   The ID of the uploaded media or FALSE on failure.
 	 */
-	public function upload($data, $media)
+	public function upload($data)
 	{
 		// Make sure we're logged in and have a valid access token.
 		if(!$this->auth_token || !$this->username)
@@ -2002,7 +2194,7 @@ class Snapchat extends SnapchatAgent {
 		}
 
 		$finfo = finfo_open(FILEINFO_MIME_TYPE);
-		$mime = finfo_file($finfo, $media);
+		$mime = finfo_buffer($finfo, $data);
 
 		if(strstr($mime, "video/"))
 		{
@@ -2014,6 +2206,7 @@ class Snapchat extends SnapchatAgent {
 		}
 		else
 		{
+			echo "\nBad file type, must be a photo or video.\n";
 			return false;
 		}
 
@@ -2135,29 +2328,33 @@ class Snapchat extends SnapchatAgent {
 			$mediaData = file_get_contents($media);
 		}
 
-		$media_id = $this->upload($mediaData, $media);
+		$media_id = $this->upload($mediaData);
 
-		$timestamp = parent::timestamp();
-		$result = parent::post(
-			'/loq/send',
-			array(
-				'media_id' => $media_id,
-				'zipped' => '0',
-				'recipients' => $recipients,
-				'username' => $this->username,
-				'time' => $time,
-				'timestamp' => $timestamp,
-				'features_map' => '{}'
-			),
-			array(
-				$this->auth_token,
-				$timestamp
-			),
-			$multipart = false,
-			$debug = $this->debug
-		);
+		if($media_id)
+		{
+			$timestamp = parent::timestamp();
+			$result = parent::post(
+				'/loq/send',
+				array(
+					'media_id' => $media_id,
+					'zipped' => '0',
+					'recipients' => $recipients,
+					'username' => $this->username,
+					'time' => $time,
+					'timestamp' => $timestamp,
+					'features_map' => '{}'
+				),
+				array(
+					$this->auth_token,
+					$timestamp
+				),
+				$multipart = false,
+				$debug = $this->debug
+			);
+			return $result;
+		}
 
-		return $result;
+		return $media_id;
 	}
 
 	/**
@@ -2196,6 +2393,45 @@ class Snapchat extends SnapchatAgent {
 				'recipient_usernames' => $recipients,
 				'timestamp' => $timestamp,
 				'username' => $this->username
+			),
+			array(
+				$this->auth_token,
+				$timestamp
+			),
+			$multipart = false,
+			$debug = $this->debug
+		);
+
+		return $result;
+	}
+
+	/**
+	 * Find nearby snapchatters
+	 *
+	 * @param string $action: update or delete
+	 * @param string $latitude
+	 * @param string $longitude
+	 *
+	 * RETURN json object with nearby snapchatters
+	 */
+	public function findNearbyFriends($action, $latitude, $longitude)
+	{
+		if(!$this->auth_token || !$this->username)
+		{
+			return FALSE;
+		}
+
+		$timestamp = parent::timestamp();
+		$result = parent::post(
+			'/bq/find_nearby_friends',
+			array(
+				'accuracyMeters' => '65.000000',
+				'action' => $update,
+				'timestamp' => $timestamp,
+				'username' => $this->username,
+				'lat' => $latitude,
+				'long' => $longitude,
+				'totalPollingDurationMillis' => '20000'
 			),
 			array(
 				$this->auth_token,
@@ -2303,7 +2539,7 @@ class Snapchat extends SnapchatAgent {
 
 		$timestamp = parent::timestamp();
 		$result = parent::post(
-			'/delete_story',
+			'/bq/delete_story',
 			array(
 				'story_id' => $storyId,
 			),
@@ -2382,7 +2618,7 @@ class Snapchat extends SnapchatAgent {
 			{
 				mkdir($path, 0777, true);
 			}
-			$file = $path . DIRECTORY_SEPARATOR . date("Y-m-d H-i-s", (int) ($timestamp / 1000)) . "-story-" . $media_id;
+			$file = $path . DIRECTORY_SEPARATOR . date("Y-m-d-H-i-s", (int) ($timestamp / 1000)) . "-story-" . $media_id;
 			$extensions = array(".jpg", ".png", ".mp4", "");
 			foreach ($extensions as $ext)
 			{
@@ -2409,12 +2645,27 @@ class Snapchat extends SnapchatAgent {
 			{
 				if(is_array($result))
 				{
+					$files = array();
 					foreach ($result as &$value)
 					{
 						if(!file_exists($file))
 						{
-							$this->writeToFile($file, $value);
+							$newFile = $this->writeToFile($file, $value);
+							if($newFile)
+								$files[] = $newFile;
 						}
+					}
+					$output = array();
+					$returnvalue = false;
+					exec('ffmpeg -version', $output, $returnvalue);
+					if ($returnvalue === 0)
+					{
+						$videoSize = shell_exec("ffprobe -v error -select_streams v:0 -show_entries stream=width,height \-of default=nokey=1:noprint_wrappers=1 $files[0]");
+						$videoSize = array_filter(explode("\n", $videoSize));
+
+						shell_exec("ffmpeg -y -i $files[1] -vf scale=$videoSize[0]:$videoSize[1] $files[1]");
+						shell_exec("ffmpeg -y -i $files[0] -i $files[1] -strict -2 -filter_complex overlay -c:a copy -flags global_header $files[0]");
+						unlink($files[1]);
 					}
 				}
 				else
@@ -2508,6 +2759,124 @@ class Snapchat extends SnapchatAgent {
 
 		return is_null($result);
 	}
+
+	/**
+	 * Gets the Discover's channel list
+	 *
+	 * @return array
+	 *   An array of channels with its edition_id
+	 */
+	 public function getDiscoversChannelList()
+	 {
+		 // Make sure we're logged in and have a valid access token.
+		 if(!$this->auth_token || !$this->username)
+		 {
+			 return FALSE;
+		 }
+		 $result = json_decode(parent::get('/discover/channel_list?region=INTERNATIONAL'), true);
+
+		 $channels = array();
+		 foreach ($result['channels'] as $channel)
+		 {
+			 $channels[] = array(
+				 'name' => $channel['publisher_formal_name'],
+				 'edition' => $channel['edition_id']
+			 );
+		 }
+
+		 return $channels;
+	 }
+
+	 /**
+ 	 * Gets Discover's videos by edition
+	 * Use getDiscoversChannelList() in order to get the edition
+	 *
+	 * @param string $edition
+	 * @param string $platform
+ 	 *
+ 	 * @return array
+ 	 *   An array of channels with all it's information
+ 	 */
+	 public function getDiscoversVideosByEdition($edition, $platform = 'android')
+	 {
+		 // Make sure we're logged in and have a valid access token.
+		 if(!$this->auth_token || !$this->username)
+		 {
+			 return FALSE;
+		 }
+		 $result = parent::get("/discover/video_catalog_v2?region=INTERNATIONAL&edition=$edition&platform=$platform");
+
+		 $channels = json_decode($this->getDiscoversChannelList(), true);
+
+		 foreach ($channels['channels'] as $channel)
+		 {
+			 if ($channel['edition_id'] == $edition)
+			 {
+				 $path = __DIR__ . DIRECTORY_SEPARATOR . "Discover" . DIRECTORY_SEPARATOR . $channel['publisher_formal_name'];
+				 if(!file_exists($path))
+				 {
+					 mkdir($path, 0777, true);
+				 }
+
+				 foreach ($channel['dsnaps_data'] as $snaps)
+				 {
+					 parse_str($snaps['url']);
+					 $zipFile = $path . DIRECTORY_SEPARATOR . $dsnap_id . '.zip';
+					 file_put_contents($zipFile , parent::get($snaps['url']));
+					 $zip = new ZipArchive;
+					 $res = $zip->open($zipFile);
+					 if ($res === TRUE) {
+						$i = 0;
+						for ($i; $i < 3; $i++)
+						{
+							$name = $zip->statIndex($i)['name'];
+							if (!strpos($name,'thumbnail') !== false)
+								break;
+						}
+  				 	$zip->extractTo($path);
+  					$zip->close();
+						unlink($zipFile);
+					} else {
+						if ($this->debug)
+  						echo "Oops! Error extracting discover snap!\n";
+							unlink($zipFile);
+					}
+				 }
+
+				 $dir = opendir($path);
+				 while (false !== ($file = readdir($dir)))
+				 {
+					 $file = $path . DIRECTORY_SEPARATOR . $file;
+					 $finfo = finfo_open(FILEINFO_MIME_TYPE);
+					 $finfo = finfo_file($finfo, $file);
+					 switch($finfo)
+					 {
+						 case "image/jpeg":
+							 $ext = ".jpg";
+							 break;
+						 case "image/png":
+							 $ext = ".png";
+							 break;
+						 case "video/mp4";
+							 $ext = ".mp4";
+							 break;
+						 default:
+							 $ext = null;
+					 }
+
+					 if($ext != null)
+					 {
+						 $newFile = $file . $ext;
+						 rename($file, $newFile);
+					 }
+					 else {
+					 	unlink($file);
+					 }
+				 }
+			 }
+		 }
+		 return $result;
+	 }
 
 	/**
 	 * Gets the best friends and scores of the specified users.
